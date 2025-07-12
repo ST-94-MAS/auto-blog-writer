@@ -37,7 +37,7 @@ def generate_title(keyword):
 def generate_content(title):
     prompt = f"「{title}」というタイトルにふさわしい日本語ブログ記事を1200文字程度で書いてください。H2やH3の見出しを使い、SEOを意識した構成にしてください。"
     res = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}]
     )
     return res["choices"][0]["message"]["content"].strip()
