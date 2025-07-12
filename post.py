@@ -29,7 +29,7 @@ def save_posted(keyword):
 def generate_title(keyword):
     prompt = f"「{keyword}」をテーマに、SEOを意識した日本語のブログ記事タイトルを30〜45文字で1つ考えてください。"
     res = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}]
     )
     return res["choices"][0]["message"]["content"].strip()
