@@ -33,7 +33,16 @@ def generate_article(keyword):
     )
     res = requests.post(MODEL_URL, headers=HEADERS, json={"inputs": prompt})
     res.raise_for_status()
-    return res.json()[0]['generated_text']
+    data = res.json()
+
+    if isinstance(data, list) and "generated_text" in data[0]:
+        return data[0]["generated_text"]
+    elif isinstance(data, dict) and "generated_text" in data:
+        return data["generated_text"]
+    elif isinstance(data, dict) and "error" in data:
+        raise RuntimeError(f"Hugging Face API Error: {data['error']}")
+    else:
+        raise ValueError(f"Unexpected response structure: {data}")
 
 def post_to_wordpress(title, content):
     post = {"title": title, "content": content, "status": "publish"}
