@@ -9,7 +9,7 @@ WP_URL = os.getenv("WP_URL")
 WP_USERNAME = os.getenv("WP_USERNAME")
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
 
-MODEL_URL = "https://api-inference.huggingface.co/models/elyza/ELYZA-japanese-Llama-2-7b-instruct"
+MODEL_URL = "https://api-inference.huggingface.co/models/cyberagent/open-calm-7b"
 HEADERS = {"Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}"}
 
 # === 関数定義 ===
