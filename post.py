@@ -9,9 +9,6 @@ WP_URL = os.getenv("WP_URL")  # 例: https://yourblog.com/wp-json/wp/v2/posts
 WP_USERNAME = os.getenv("WP_USERNAME")
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
 
-# OpenAI APIキー設定
-openai.api_key = OPENAI_API_KEY
-
 def load_keywords():
     with open("keywords.csv", encoding="utf-8") as f:
         keywords = [line.strip() for line in f if line.strip()]
