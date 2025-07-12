@@ -1,31 +1,32 @@
+
 name: Auto Post to WordPress
 
 on:
-  schedule:
-    - cron: '0 1 * * *'  # 毎日10:00 JST（= 1:00 UTC）
-  workflow_dispatch:      # 手動実行も可
+  workflow_dispatch:
 
 jobs:
   autopost:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Clean pip cache
+        run: pip cache purge
 
-      - name: Run auto post script
+      - name: Install dependencies
+        run: pip install --no-cache-dir -r requirements.txt
+
+      - name: Run Python script
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           WP_URL: ${{ secrets.WP_URL }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
         run: python post.py
-
