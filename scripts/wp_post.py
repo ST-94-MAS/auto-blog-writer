@@ -9,6 +9,13 @@ import sys
 WP_URL          = os.getenv("WP_URL")
 WP_USERNAME     = os.getenv("WP_USERNAME")
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
+
+- name: Show env for debug
+  run: |
+    echo "WP_URL=$WP_URL"
+    echo "WP_USERNAME=$WP_USERNAME"
+    echo "WP_APP_PASSWORD=${WP_APP_PASSWORD:0:4}****"
+
 if not all([WP_URL, WP_USERNAME, WP_APP_PASSWORD]):
     print("Error: WP_URL, WP_USERNAME, or WP_APP_PASSWORD is unset", file=sys.stderr)
     sys.exit(1)
