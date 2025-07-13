@@ -1,70 +1,44 @@
 import os
-import requests
+import datetime
 import csv
-from requests.auth import HTTPBasicAuth
+import openai
 
-# === 環境変数の取得 ===
-HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN")
-WP_URL = os.getenv("WP_URL")
-WP_USERNAME = os.getenv("WP_USERNAME")
-WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
+# OpenAI API キーを環境変数から取得
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-MODEL_URL = "https://api-inference.huggingface.co/models/rinna/japanese-gpt-neox-3.6b-instruction-ppo"
-HEADERS = {"Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}"}
+# キーワード CSV を読み込んでランダムに選択（例）
+with open("keywords.csv", encoding="utf-8") as f:
+    reader = csv.reader(f)
+    keywords = [row[0] for row in reader if row]
+keyword = keywords[datetime.date.today().day % len(keywords)]
 
-# === 関数定義 ===
-def load_keywords():
-    with open("keywords.csv", encoding="utf-8") as f:
-        keywords = [line.strip() for line in f if line.strip()]
-    posted = set()
-    if os.path.exists("posted.csv"):
-        with open("posted.csv", encoding="utf-8") as f:
-            posted = {line.strip() for line in f}
-    return [kw for kw in keywords if kw not in posted]
+# プロンプトを組み立て
+prompt = f"""
+あなたはプロの技術ブログライターです。
+以下のキーワードに沿って、WordPress 用の記事を日本語で執筆してください。
+・キーワード: {keyword}
+・構成: 見出し（h2,h3）を含む
+・コードスニペット: 必要に応じて AWS CDK や GitHub Actions の例を挿入
+"""
 
-def save_posted(keyword):
-    with open("posted.csv", "a", encoding="utf-8") as f:
-        f.write(keyword + "\n")
+# ChatGPT（gpt-4）に投げる
+resp = openai.ChatCompletion.create(
+    model="gpt-4",
+    messages=[
+        {"role": "system", "content": "You are a helpful technical writer."},
+        {"role": "user",   "content": prompt}
+    ],
+    max_tokens=2000,
+    temperature=0.7,
+)
 
-def generate_article(keyword):
-    prompt = (
-        f"次のキーワードを使ってSEOに強い日本語ブログ記事を書いてください：{keyword}。\n"
-        f"タイトル（30〜45文字）を最初に、次に本文（H2・H3見出しを含めて1200文字程度）を書いてください。"
-    )
-    res = requests.post(MODEL_URL, headers=HEADERS, json={"inputs": prompt})
-    res.raise_for_status()
-    data = res.json()
+content = resp.choices[0].message.content
 
-    if isinstance(data, list) and "generated_text" in data[0]:
-        return data[0]["generated_text"]
-    elif isinstance(data, dict) and "generated_text" in data:
-        return data["generated_text"]
-    elif isinstance(data, dict) and "error" in data:
-        raise RuntimeError(f"Hugging Face API Error: {data['error']}")
-    else:
-        raise ValueError(f"Unexpected response structure: {data}")
+# Markdown ファイルとして保存
+today = datetime.date.today().isoformat()
+os.makedirs("posts", exist_ok=True)
+filename = f"posts/{today}-{keyword}.md"
+with open(filename, "w", encoding="utf-8") as f:
+    f.write(content)
 
-def post_to_wordpress(title, content):
-    post = {"title": title, "content": content, "status": "publish"}
-    res = requests.post(WP_URL, json=post, auth=HTTPBasicAuth(WP_USERNAME, WP_APP_PASSWORD))
-    print("投稿ステータス:", res.status_code)
-    if res.status_code != 201:
-        print(res.text)
-
-# === メイン処理 ===
-def main():
-    keywords = load_keywords()
-    if not keywords:
-        print("投稿できるキーワードがありません。")
-        return
-    keyword = keywords[0]
-    print("📝 投稿キーワード:", keyword)
-    article = generate_article(keyword)
-    title, content = article.split("\n", 1)
-    post_to_wordpress(title.strip(), content.strip())
-    save_posted(keyword)
-    print("✅ 投稿完了")
-
-if __name__ == "__main__":
-    main()
-
+print(f"Generated: {filename}")
