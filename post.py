@@ -32,7 +32,7 @@ def main():
 """
 
     resp = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-4-0613",
         messages=[
             {"role": "system", "content": "You are a helpful technical writer."},
             {"role": "user",   "content": prompt}
