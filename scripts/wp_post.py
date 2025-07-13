@@ -24,7 +24,8 @@ print(f"DEBUG: WP_URL={WP_URL}", file=sys.stderr)
 print(f"DEBUG: WP_USERNAME={WP_USERNAME}", file=sys.stderr)
 print(f"DEBUG: WP_APP_PASSWORD length={len(WP_APP_PASSWORD) if WP_APP_PASSWORD else 0}", file=sys.stderr)
 
-# 必要な環境変数チェック\ if not all([WP_URL, WP_USERNAME, WP_APP_PASSWORD]):
+# 必要な環境変数チェック
+if not all([WP_URL, WP_USERNAME, WP_APP_PASSWORD]):
     print("Error: WP_URL, WP_USERNAME, or WP_APP_PASSWORD is unset", file=sys.stderr)
     sys.exit(1)
 
