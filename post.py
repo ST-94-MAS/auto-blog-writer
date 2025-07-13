@@ -2,27 +2,35 @@
 # post.py
 
 import os
+import sys
 import datetime
 import csv
 from dotenv import load_dotenv
 import openai
+from openai.error import RateLimitError, OpenAIError
 
 def main():
     # .env ファイルから環境変数を読み込む
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise RuntimeError("環境変数 OPENAI_API_KEY が設定されていません")
+        print("Error: 環境変数 OPENAI_API_KEY が設定されていません", file=sys.stderr)
+        sys.exit(1)
     openai.api_key = api_key
 
     # キーワード CSV を読み込んでリスト化
-    with open("keywords.csv", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        keywords = [row[0].strip() for row in reader if row]
+    try:
+        with open("keywords.csv", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            keywords = [row[0].strip() for row in reader if row]
+    except FileNotFoundError:
+        print("Error: keywords.csv が見つかりません", file=sys.stderr)
+        sys.exit(1)
     if not keywords:
-        raise RuntimeError("keywords.csv が空です")
+        print("Error: keywords.csv にキーワードがありません", file=sys.stderr)
+        sys.exit(1)
 
-    # 今日の日付をインデックス代わりにしてキーワードを選択
+    # 今日の日付をキーにしてキーワードを選択
     keyword = keywords[datetime.date.today().day % len(keywords)]
 
     # プロンプトを組み立て
@@ -34,16 +42,24 @@ def main():
 ・コードスニペット: 必要に応じて AWS CDK や GitHub Actions の例を挿入
 """
 
-    # ChatGPT（gpt-3.5-turbo）に投げる
-    resp = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a helpful technical writer."},
-            {"role": "user",   "content": prompt}
-        ],
-        max_tokens=2000,
-        temperature=0.7,
-    )
+    # ChatGPT に投げる
+    try:
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful technical writer."},
+                {"role": "user",   "content": prompt}
+            ],
+            max_tokens=2000,
+            temperature=0.7,
+        )
+    except RateLimitError:
+        print("Error: レートリミットを超えました。プランと請求情報を確認してください。", file=sys.stderr)
+        sys.exit(1)
+    except OpenAIError as e:
+        print(f"Error: OpenAI API リクエストに失敗しました: {e}", file=sys.stderr)
+        sys.exit(1)
+
     content = resp.choices[0].message.content
 
     # posts/ フォルダに Markdown ファイルで保存
