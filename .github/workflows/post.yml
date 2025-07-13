@@ -1,46 +1,46 @@
-# .github/workflows/post.yml の一部
+name: 自動ポスト生成＆WordPress公開
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate_and_publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      WP_URL:          ${{ secrets.WP_URL }}
+      WP_USERNAME:     ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+
     steps:
       - name: コードをチェックアウト
         uses: actions/checkout@v4
 
-      # （中略）
+      - name: Python セットアップ
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: 依存ライブラリをインストール
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install markdown requests
+
+      - name: 記事を生成
+        run: python post.py
 
       - name: WordPress に投稿（タグなし）
-        shell: bash
+        run: python scripts/wp_post.py
+
+      - name: 生成記事をコミット＆プッシュ
         run: |
-          python << 'EOF'
-          #!/usr/bin/env python3
-          import os, glob, markdown, requests, sys
-
-          WP_URL          = os.getenv("WP_URL")
-          WP_USERNAME     = os.getenv("WP_USERNAME")
-          WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
-          if not all([WP_URL, WP_USERNAME, WP_APP_PASSWORD]):
-              print("Error: WP_URL, WP_USERNAME, WP_APP_PASSWORD のいずれかが未設定です", file=sys.stderr)
-              sys.exit(1)
-
-          md_files = sorted(glob.glob("posts/*.md"))
-          if not md_files:
-              print("Error: posts/ フォルダに Markdown ファイルが見つかりません", file=sys.stderr)
-              sys.exit(1)
-          md_file = md_files[-1]
-
-          basename = os.path.basename(md_file)
-          title    = os.path.splitext(basename)[0]
-
-          content_md   = open(md_file, encoding="utf-8").read()
-          content_html = markdown.markdown(content_md)
-
-          post_resp = requests.post(
-              f"{WP_URL}/wp-json/wp/v2/posts",
-              auth=(WP_USERNAME, WP_APP_PASSWORD),
-              json={
-                  "title":   title,
-                  "content": content_html,
-                  "status":  "publish"
-              }
-          )
-          post_resp.raise_for_status()
-          print("✅ Posted to WordPress:", post_resp.json().get("link"))
-          EOF
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add posts/
+          git diff --quiet || git commit -m "chore: 自動生成記事を追加"
+          git push
 
