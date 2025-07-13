@@ -8,21 +8,16 @@ import markdown
 import requests
 import sys
 
-# 必要な環境変数を取得
-WP_URL          = os.getenv("WP_URL")
-WP_USERNAME     = os.getenv("WP_USERNAME")
-WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
+# 必要な環境変数を取得し、余計な空白を除去
+WP_URL          = os.getenv("WP_URL", "").rstrip("/")
+WP_USERNAME     = os.getenv("WP_USERNAME", "").strip()
+WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "").strip()
 
-# WP_URL の末尾スラッシュを除去（統一）
-if WP_URL:
-    WP_URL = WP_URL.rstrip("/")
-
-# デバッグ: 実際に投げるエンドポイントを確認
-print(f"DEBUG: Posting endpoint -> {WP_URL}/wp-json/wp/v2/posts", file=sys.stderr)
 # デバッグ: 環境変数の内容を確認
-print(f"DEBUG: WP_URL={WP_URL}", file=sys.stderr)
-print(f"DEBUG: WP_USERNAME={WP_USERNAME}", file=sys.stderr)
-print(f"DEBUG: WP_APP_PASSWORD length={len(WP_APP_PASSWORD) if WP_APP_PASSWORD else 0}", file=sys.stderr)
+print(f"DEBUG: Posting endpoint -> {WP_URL}/wp-json/wp/v2/posts", file=sys.stderr)
+print(f"DEBUG: WP_URL repr={repr(WP_URL)}", file=sys.stderr)
+print(f"DEBUG: WP_USERNAME repr={repr(WP_USERNAME)}", file=sys.stderr)
+print(f"DEBUG: WP_APP_PASSWORD repr={repr(WP_APP_PASSWORD)} (len={len(WP_APP_PASSWORD)})", file=sys.stderr)
 
 # 必要な環境変数チェック
 if not all([WP_URL, WP_USERNAME, WP_APP_PASSWORD]):
@@ -62,6 +57,8 @@ try:
     resp.raise_for_status()
 except requests.exceptions.HTTPError as e:
     print(f"❌ Failed to post to WordPress: {e} (status {resp.status_code})", file=sys.stderr)
+    print(f"Response body: {resp.text}", file=sys.stderr)
     sys.exit(1)
 
 print("✅ Posted to WordPress:", resp.json().get("link"))
+
