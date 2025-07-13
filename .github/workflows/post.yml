@@ -10,6 +10,7 @@ jobs:
     permissions:
       contents: write
 
+    # <-- ここで環境変数を定義しています
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       WP_URL:          ${{ secrets.WP_URL }}
@@ -39,63 +40,59 @@ jobs:
         run: |
           python << 'EOF'
           #!/usr/bin/env python3
-          import os, glob, markdown, requests
+          import os, glob, markdown, requests, sys
 
+          # GitHub Actions の env: で定義した変数を読み込む
           WP_URL          = os.getenv("WP_URL")
           WP_USERNAME     = os.getenv("WP_USERNAME")
           WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
-
           if not all([WP_URL, WP_USERNAME, WP_APP_PASSWORD]):
-              raise RuntimeError("WP_URL, WP_USERNAME, WP_APP_PASSWORD のいずれかが未設定です")
+              print("Error: WP_URL, WP_USERNAME, WP_APP_PASSWORD のいずれかが未設定です", file=sys.stderr)
+              sys.exit(1)
 
+          # 最新の Markdown ファイルを取得
           md_files = sorted(glob.glob("posts/*.md"))
           if not md_files:
-              raise RuntimeError("posts/ フォルダに Markdown ファイルが見つかりません")
+              print("Error: posts/ フォルダに Markdown ファイルが見つかりません", file=sys.stderr)
+              sys.exit(1)
           md_file = md_files[-1]
 
+          # ファイル名から title と tag_name を切り出す
           basename = os.path.basename(md_file)
-          # YYYY-MM-DD-キーワード.md の “キーワード” 部分をタグに
-          tag_name = os.path.splitext(basename)[0].split('-', 3)[-1]
           title    = os.path.splitext(basename)[0]
+          tag_name = title.split("-", 3)[-1]
+          slug     = tag_name.lower()
 
+          # Markdown → HTML
           content_md   = open(md_file, encoding="utf-8").read()
           content_html = markdown.markdown(content_md)
 
-          # 既存タグ検索
-          slug = tag_name.lower()
-          resp = requests.get(
+          # タグを POST（重複なら既存IDを取得）
+          tag_resp = requests.post(
               f"{WP_URL}/wp-json/wp/v2/tags",
               auth=(WP_USERNAME, WP_APP_PASSWORD),
-              params={"slug": slug}
+              json={"name": tag_name, "slug": slug}
           )
-          resp.raise_for_status()
-          tags = resp.json()
-
-          if tags:
-              tag_id = tags[0]["id"]
+          if tag_resp.status_code == 201:
+              tag_id = tag_resp.json()["id"]
+          elif tag_resp.status_code == 400 and tag_resp.json().get("code") == "rest_term_exists":
+              tag_id = tag_resp.json()["data"]["term_id"]
           else:
-              # タグ作成
-              resp = requests.post(
-                  f"{WP_URL}/wp-json/wp/v2/tags",
-                  auth=(WP_USERNAME, WP_APP_PASSWORD),
-                  json={"name": tag_name, "slug": slug}
-              )
-              resp.raise_for_status()
-              tag_id = resp.json()["id"]
+              tag_resp.raise_for_status()
 
-          # 記事投稿
-          resp = requests.post(
+          # 記事を投稿（タグ付き＆公開）
+          post_resp = requests.post(
               f"{WP_URL}/wp-json/wp/v2/posts",
               auth=(WP_USERNAME, WP_APP_PASSWORD),
               json={
-                  "title": title,
+                  "title":   title,
                   "content": content_html,
-                  "status": "publish",
-                  "tags": [tag_id]
+                  "status":  "publish",
+                  "tags":    [tag_id]
               }
           )
-          resp.raise_for_status()
-          print("✅ Posted to WordPress:", resp.json().get("link"))
+          post_resp.raise_for_status()
+          print("✅ Posted to WordPress:", post_resp.json().get("link"))
           EOF
 
       - name: コミット＆プッシュ（生成記事をリポジトリに残す）
