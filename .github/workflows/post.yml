@@ -9,8 +9,9 @@ jobs:
     permissions:
       contents: write
 
+    # ここで secrets を環境変数として渡す
     env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}
       WP_URL:          ${{ secrets.WP_URL }}
       WP_USERNAME:     ${{ secrets.WP_USERNAME }}
       WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
@@ -32,6 +33,12 @@ jobs:
 
       - name: 記事を生成
         run: python post.py
+
+      - name: WordPress 投稿をデバッグ
+        run: |
+          echo "WP_URL=$WP_URL"
+          echo "WP_USERNAME=$WP_USERNAME"
+          echo "WP_APP_PASSWORD=${WP_APP_PASSWORD:0:4}****"
 
       - name: WordPress に投稿（タグなし）
         run: python scripts/wp_post.py

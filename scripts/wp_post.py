@@ -40,6 +40,10 @@ resp = requests.post(
         "status":  "publish"
     }
 )
-resp.raise_for_status()
+try:
+    resp.raise_for_status()
+except requests.exceptions.HTTPError as e:
+    print(f"❌ Failed to post to WordPress: {e} (status {resp.status_code})", file=sys.stderr)
+    sys.exit(1)
 
 print("✅ Posted to WordPress:", resp.json().get("link"))
