@@ -1,41 +1,4 @@
-# .github/workflows/post.yml
-name: 自動ポスト生成＆WordPress公開
-
-on:
-  workflow_dispatch:
-
-jobs:
-  generate_and_publish:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    # <-- ここで環境変数を定義しています
-    env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      WP_URL:          ${{ secrets.WP_URL }}
-      WP_USERNAME:     ${{ secrets.WP_USERNAME }}
-      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-
-    steps:
-      - name: コードをチェックアウト
-        uses: actions/checkout@v4
-
-      - name: Python セットアップ
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
-      - name: 依存ライブラリをインストール
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install markdown requests
-
-      - name: 記事を生成
-        run: python post.py
-
-      - name: WordPress に投稿（タグ付き）
+      - name: WordPress に投稿（タグなし）
         shell: bash
         run: |
           python << 'EOF'
@@ -57,49 +20,25 @@ jobs:
               sys.exit(1)
           md_file = md_files[-1]
 
-          # ファイル名から title と tag_name を切り出す
+          # ファイル名からタイトルを切り出し
           basename = os.path.basename(md_file)
           title    = os.path.splitext(basename)[0]
-          tag_name = title.split("-", 3)[-1]
-          slug     = tag_name.lower()
 
-          # Markdown → HTML
+          # Markdown を HTML に変換
           content_md   = open(md_file, encoding="utf-8").read()
           content_html = markdown.markdown(content_md)
 
-          # タグを POST（重複なら既存IDを取得）
-          tag_resp = requests.post(
-              f"{WP_URL}/wp-json/wp/v2/tags",
-              auth=(WP_USERNAME, WP_APP_PASSWORD),
-              json={"name": tag_name, "slug": slug}
-          )
-          if tag_resp.status_code == 201:
-              tag_id = tag_resp.json()["id"]
-          elif tag_resp.status_code == 400 and tag_resp.json().get("code") == "rest_term_exists":
-              tag_id = tag_resp.json()["data"]["term_id"]
-          else:
-              tag_resp.raise_for_status()
-
-          # 記事を投稿（タグ付き＆公開）
+          # 投稿
           post_resp = requests.post(
               f"{WP_URL}/wp-json/wp/v2/posts",
               auth=(WP_USERNAME, WP_APP_PASSWORD),
               json={
                   "title":   title,
                   "content": content_html,
-                  "status":  "publish",
-                  "tags":    [tag_id]
+                  "status":  "publish"
               }
           )
           post_resp.raise_for_status()
           print("✅ Posted to WordPress:", post_resp.json().get("link"))
           EOF
-
-      - name: コミット＆プッシュ（生成記事をリポジトリに残す）
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add posts/
-          git diff --quiet || git commit -m "chore: 自動生成記事を追加"
-          git push
 
