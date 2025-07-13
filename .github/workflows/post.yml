@@ -1,35 +1,64 @@
+#!/usr/bin/env python3
+import os
+import glob
+import markdown
+import requests
 
-name: Auto Post to WordPress
+# GitHub Actions の env: でセットしている変数と一致させる
+WP_URL          = os.getenv("WP_URL")
+WP_USERNAME     = os.getenv("WP_USERNAME")
+WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
 
-on:
-  workflow_dispatch:
+if not all([WP_URL, WP_USERNAME, WP_APP_PASSWORD]):
+    raise RuntimeError("WP_URL, WP_USERNAME, WP_APP_PASSWORD のいずれかが未設定です")
 
-jobs:
-  autopost:
-    runs-on: ubuntu-latest
+# 1) 最新の Markdown ファイルを取得
+md_files = sorted(glob.glob("posts/*.md"))
+if not md_files:
+    raise RuntimeError("posts/ フォルダに Markdown ファイルが見つかりません")
+md_file = md_files[-1]
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+# ファイル名からタイトルとタグ名を分割（例: 2025-07-13-AWS → タグ: AWS）
+basename = os.path.basename(md_file)
+title, tag_name = os.path.splitext(basename)[0].split("-", 3)[0:4][-1], os.path.splitext(basename)[0].split("-", 3)[-1]
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+# 2) Markdown を HTML に変換
+content_md = open(md_file, encoding="utf-8").read()
+content_html = markdown.markdown(content_md)
 
-      - name: Clean pip cache
-        run: pip cache purge
+# 3) 既存タグを検索（slug で小文字検索）
+slug = tag_name.lower()
+resp = requests.get(
+    f"{WP_URL}/wp-json/wp/v2/tags",
+    auth=(WP_USERNAME, WP_APP_PASSWORD),
+    params={"slug": slug}
+)
+resp.raise_for_status()
+tags = resp.json()
 
-      - name: Install dependencies
-        run: pip install --no-cache-dir -r requirements.txt
+if tags:
+    tag_id = tags[0]["id"]
+else:
+    # 4) なければ新規タグ作成
+    resp = requests.post(
+        f"{WP_URL}/wp-json/wp/v2/tags",
+        auth=(WP_USERNAME, WP_APP_PASSWORD),
+        json={"name": tag_name, "slug": slug}
+    )
+    resp.raise_for_status()
+    tag_id = resp.json()["id"]
 
-      - name: Run Python script
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY  }}
-          WP_URL: ${{ secrets.WP_URL }}
-          WP_USERNAME: ${{ secrets.WP_USERNAME }}
-          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        run: python post.py
+# 5) 記事を投稿（タグ付き）
+resp = requests.post(
+    f"{WP_URL}/wp-json/wp/v2/posts",
+    auth=(WP_USERNAME, WP_APP_PASSWORD),
+    json={
+        "title": title,
+        "content": content_html,
+        "status": "publish",
+        "tags": [tag_id]
+    }
+)
+resp.raise_for_status()
 
-
-
+print("✅ Posted to WordPress:", resp.json().get("link"))
