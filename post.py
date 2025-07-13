@@ -1,60 +1,57 @@
-#!/usr/bin/env python3
-# post.py
-import os
-import datetime
-import csv
-from dotenv import load_dotenv
-import openai
+i# .github/workflows/post.yml の一例
+name: 自動ポスト生成
 
-def main():
-    # .env ファイルから環境変数を読み込む
-    load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("環境変数 OPENAI_API_KEY が設定されていません")
+on:
+  workflow_dispatch:
 
-    # OpenAI API キーをセット
-    openai.api_key = api_key
+jobs:
+  generate_and_deploy:
+    runs-on: ubuntu-latest
 
-    # キーワード CSV を読み込んでリスト化
-    with open("keywords.csv", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        keywords = [row[0].strip() for row in reader if row]
-    if not keywords:
-        raise RuntimeError("keywords.csv にキーワードがありません")
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      WP_URL:          ${{ secrets.WP_URL }}
+      WP_USERNAME:     ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
 
-    # 今日の日付をインデックス代わりにしてキーワードを選択
-    keyword = keywords[datetime.date.today().day % len(keywords)]
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4
 
-    # プロンプトを組み立て
-    prompt = f"""
-あなたはプロの技術ブログライターです。
-以下のキーワードに沿って、WordPress 用の記事を日本語で執筆してください。
-・キーワード: {keyword}
-・構成: 見出し（h2, h3）を含む
-・コードスニペット: 必要に応じて AWS CDK や GitHub Actions の例を挿入
-"""
+      - name: Python セットアップ
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
 
-    # ChatGPT に投げて生成
-    resp = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a helpful technical writer."},
-            {"role": "user",   "content": prompt}
-        ],
-        max_tokens=2000,
-        temperature=0.7,
-    )
-    content = resp.choices[0].message.content
+      - name: 依存パッケージをインストール
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-    # posts/ フォルダに Markdown ファイルで保存
-    today = datetime.date.today().isoformat()
-    os.makedirs("posts", exist_ok=True)
-    filename = f"posts/{today}-{keyword}.md"
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(content)
+      - name: 記事を生成
+        run: |
+          python post.py
 
-    print(f"Generated: {filename}")
+      - name: WordPress に投稿
+        run: |
+          # 生成された Markdown を HTML に変換して投稿する例
+          pip install markdown requests
+          python << 'EOF'
+import os, glob, markdown, requests
+# 最新ファイルを取得
+md = sorted(glob.glob("posts/*.md"))[-1]
+html = markdown.markdown(open(md, encoding="utf-8").read())
+resp = requests.post(
+    f"{os.getenv('WP_URL')}/wp-json/wp/v2/posts",
+    auth=(os.getenv('WP_USERNAME'), os.getenv('WP_APP_PASSWORD')),
+    json={"title": md, "content": html, "status": "publish"}
+)
+resp.raise_for_status()
+print("Posted:", resp.json()["link"])
+EOF
 
-if __name__ == "__main__":
-    main()
+      - name: コミット＆プッシュ（必要なら）
+        run: |
+          git add posts/
+          git diff --quiet || git commit -m "chore: 新規記事を自動投稿"
+          git push
