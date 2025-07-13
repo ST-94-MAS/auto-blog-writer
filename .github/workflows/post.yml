@@ -1,3 +1,10 @@
+# .github/workflows/post.yml の一部
+    steps:
+      - name: コードをチェックアウト
+        uses: actions/checkout@v4
+
+      # （中略）
+
       - name: WordPress に投稿（タグなし）
         shell: bash
         run: |
@@ -5,7 +12,6 @@
           #!/usr/bin/env python3
           import os, glob, markdown, requests, sys
 
-          # GitHub Actions の env: で定義した変数を読み込む
           WP_URL          = os.getenv("WP_URL")
           WP_USERNAME     = os.getenv("WP_USERNAME")
           WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD")
@@ -13,22 +19,18 @@
               print("Error: WP_URL, WP_USERNAME, WP_APP_PASSWORD のいずれかが未設定です", file=sys.stderr)
               sys.exit(1)
 
-          # 最新の Markdown ファイルを取得
           md_files = sorted(glob.glob("posts/*.md"))
           if not md_files:
               print("Error: posts/ フォルダに Markdown ファイルが見つかりません", file=sys.stderr)
               sys.exit(1)
           md_file = md_files[-1]
 
-          # ファイル名からタイトルを切り出し
           basename = os.path.basename(md_file)
           title    = os.path.splitext(basename)[0]
 
-          # Markdown を HTML に変換
           content_md   = open(md_file, encoding="utf-8").read()
           content_html = markdown.markdown(content_md)
 
-          # 投稿
           post_resp = requests.post(
               f"{WP_URL}/wp-json/wp/v2/posts",
               auth=(WP_USERNAME, WP_APP_PASSWORD),
