@@ -8,21 +8,24 @@ from dotenv import load_dotenv
 import openai
 
 def main():
+    # .env ファイルから環境変数を読み込む
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("環境変数 OPENAI_API_KEY が設定されていません")
     openai.api_key = api_key
 
-    # キーワード読み込み
+    # キーワード CSV を読み込んでリスト化
     with open("keywords.csv", encoding="utf-8") as f:
         reader = csv.reader(f)
         keywords = [row[0].strip() for row in reader if row]
     if not keywords:
         raise RuntimeError("keywords.csv が空です")
 
+    # 今日の日付をインデックス代わりにしてキーワードを選択
     keyword = keywords[datetime.date.today().day % len(keywords)]
 
+    # プロンプトを組み立て
     prompt = f"""
 あなたはプロの技術ブログライターです。
 以下のキーワードに沿って、WordPress 用の記事を日本語で執筆してください。
@@ -31,8 +34,9 @@ def main():
 ・コードスニペット: 必要に応じて AWS CDK や GitHub Actions の例を挿入
 """
 
+    # ChatGPT（gpt-3.5-turbo）に投げる
     resp = openai.ChatCompletion.create(
-        model="gpt-4-0613",
+        model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "You are a helpful technical writer."},
             {"role": "user",   "content": prompt}
@@ -42,7 +46,7 @@ def main():
     )
     content = resp.choices[0].message.content
 
-    # Markdown 保存
+    # posts/ フォルダに Markdown ファイルで保存
     today = datetime.date.today().isoformat()
     os.makedirs("posts", exist_ok=True)
     filename = f"posts/{today}-{keyword}.md"
@@ -53,3 +57,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
