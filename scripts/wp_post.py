@@ -7,6 +7,7 @@ import glob
 import markdown
 import requests
 import sys
+import json
 
 # 環境変数取得 & トリム
 WP_URL          = os.getenv("WP_URL", "").rstrip("/")
@@ -52,6 +53,11 @@ payload = {
     "content": content_html,
     "status":  "publish"
 }
+
+# payload.json を保存
+with open("payload.json", "w", encoding="utf-8") as f:
+    json.dump(payload, f, ensure_ascii=False, indent=2)
+print("✅ payload.json を出力しました")
 
 # REST API 呼び出し
 resp = requests.post(
