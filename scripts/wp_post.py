@@ -26,11 +26,13 @@ with open(md_file, encoding="utf-8") as f:
     content_md = f.read()
 content_html = markdown.markdown(content_md)
 
-# === 危険タグ・属性の除去関数 ===
+# === 危険タグ・属性・コードスニペットの除去関数 ===
 def sanitize_html(html: str) -> str:
     # 危険なタグを除去
     html = re.sub(r"<(script|iframe|style|svg).*?>.*?</\1>", "", html, flags=re.IGNORECASE | re.DOTALL)
-    # 危険な属性を除去（onload, onclickなど）
+    # コードブロックを除去（```〜```）
+    html = re.sub(r"```.*?```", "", html, flags=re.DOTALL)
+    # 危険な属性（onload, onclick など）
     html = re.sub(r'on\w+=".*?"', "", html, flags=re.IGNORECASE)
     return html
 
