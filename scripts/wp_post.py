@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/wp_post.py - WordPress 自動投稿スクリプト（payload.json出力、安全対策付き）
+scripts/wp_post.py - WordPress 自動投稿スクリプト（payload.json出力、安全対策＋SEO対応）
 """
 
 import os
@@ -44,11 +44,20 @@ if len(content_html) > MAX_LENGTH:
     print(f"⚠️ 本文が長すぎます（{len(content_html)}文字）。{MAX_LENGTH}文字に切り詰めます。", file=sys.stderr)
     content_html = content_html[:MAX_LENGTH] + "\n<p>...（以下省略）</p>"
 
+# === SEO用メタ情報 ===
+aioseo_title = f"{title} | OtomosaBlog"
+aioseo_description = content_md.strip().replace('\n', '').replace('#', '').strip()
+aioseo_description = aioseo_description[:120]  # 長すぎると弾かれるため制限
+
 # === 投稿ペイロード生成 ===
 payload = {
     "title": title,
     "content": content_html,
-    "status": "publish"
+    "status": "publish",
+    "meta": {
+        "aioseo_title": aioseo_title,
+        "aioseo_description": aioseo_description
+    }
 }
 
 # === JSONファイルとして保存 ===

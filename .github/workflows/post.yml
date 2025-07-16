@@ -32,13 +32,13 @@ jobs:
           pip install -r requirements.txt
           pip install markdown requests
 
-      - name: 記事を生成
+      - name: 記事を生成（ChatGPTで）
         run: python post.py
 
-      - name: payload.json を生成（投稿スクリプト）
+      - name: payload.json を生成（投稿データ＋SEOメタ）
         run: python scripts/wp_post.py
 
-      - name: WordPress に投稿（curl 使用）
+      - name: WordPress に投稿（AIOSEO対応）
         run: |
           echo "== CURLで投稿 =="
           curl -i -X POST \
@@ -54,4 +54,3 @@ jobs:
           git add posts/ payload.json
           git diff --quiet || git commit -m "chore: 自動生成記事を追加"
           git push
-
