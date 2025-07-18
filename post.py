@@ -7,6 +7,8 @@ import datetime
 import csv
 from dotenv import load_dotenv
 import openai
+import random
+import re
 from openai.error import RateLimitError, OpenAIError
 
 def main():
@@ -30,8 +32,9 @@ def main():
         print("Error: keywords.csv にキーワードがありません", file=sys.stderr)
         sys.exit(1)
 
-    # 今日の日付をキーにしてキーワードを選択
-    keyword = keywords[datetime.date.today().day % len(keywords)]
+    # ランダムに 1〜4 個のキーワードを選ぶ
+    selected_keywords = random.sample(keywords, k=random.randint(1, 4))
+    keyword = ", ".join(selected_keywords)
 
     # プロンプトを組み立て
     prompt = f"""
@@ -59,7 +62,7 @@ def main():
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a helpful technical writer."},
-                {"role": "user",   "content": prompt}
+                {"role": "user", "content": prompt}
             ],
             max_tokens=2000,
             temperature=0.7,
@@ -71,17 +74,28 @@ def main():
         print(f"Error: OpenAI API リクエストに失敗しました: {e}", file=sys.stderr)
         sys.exit(1)
 
-    content = resp.choices[0].message.content
+    content = resp.choices[0].message.content.strip()
 
-    # posts/ フォルダに Markdown ファイルで保存
+    # === タイトル抽出（最初の "# " から取得）===
+    first_line = content.splitlines()[0]
+    if first_line.startswith("# "):
+        title = first_line[2:].strip()
+    else:
+        title = "Untitled"
+
+    # ファイル名用に整形
+    safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '-')
+    safe_title = safe_title[:50]  # 長すぎるファイル名を制限（任意）
+
+    # Markdown ファイル保存
     today = datetime.date.today().isoformat()
     os.makedirs("posts", exist_ok=True)
-    filename = f"posts/{today}-{keyword}.md"
+    filename = f"posts/{today}-{safe_title}.md"
     with open(filename, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print(f"Generated: {filename}")
+    print(f"✅ Markdown saved: {filename}")
+    print(f"📌 タイトル: {title}")
 
 if __name__ == "__main__":
     main()
-
