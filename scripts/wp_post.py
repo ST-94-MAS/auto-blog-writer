@@ -19,8 +19,8 @@ md_file = md_files[-1]
 
 # === タイトル生成 ===
 basename = os.path.basename(md_file)
-title = os.path.splitext(basename)[0]
-
+raw_title = os.path.splitext(basename)[0]
+title = re.sub(r'^\d{8}_?', '', raw_title)
 # === Markdown → HTML変換 ===
 with open(md_file, encoding="utf-8") as f:
     content_md = f.read()
@@ -38,8 +38,8 @@ def sanitize_html(html: str) -> str:
 
 content_html = sanitize_html(content_html)
 
-# === 本文長制限（5000文字まで）===
-MAX_LENGTH = 5000
+# === 本文長制限（9000文字まで）===
+MAX_LENGTH = 9000
 if len(content_html) > MAX_LENGTH:
     print(f"⚠️ 本文が長すぎます（{len(content_html)}文字）。{MAX_LENGTH}文字に切り詰めます。", file=sys.stderr)
     content_html = content_html[:MAX_LENGTH] + "\n<p>...（以下省略）</p>"
