@@ -56,7 +56,7 @@ def main():
   ・最後に<h2>まとめ</h2>で要点を整理してください
 
 【文字数】
-- 約9000文字
+- 可能な限り詳細に記述してください（最大長にこだわる必要はありません）
 """
 
     try:
@@ -66,7 +66,7 @@ def main():
                 {"role": "system", "content": "You are a helpful technical writer."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=8192,
+            max_tokens=4000,
             temperature=0.7,
         )
     except RateLimitError:
