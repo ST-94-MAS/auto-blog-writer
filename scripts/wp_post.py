@@ -10,6 +10,14 @@ import json
 import sys
 import re
 
+# === 投稿タイトルの読み込み ===
+try:
+    with open("meta/title.txt", encoding="utf-8") as f:
+        title = f.read().strip()
+except FileNotFoundError:
+    print("❌ Error: meta/title.txt が見つかりません", file=sys.stderr)
+    sys.exit(1)
+
 # === 最新 Markdown ファイル検出 ===
 md_files = sorted(glob.glob("posts/*.md"))
 if not md_files:
@@ -17,10 +25,6 @@ if not md_files:
     sys.exit(1)
 md_file = md_files[-1]
 
-# === タイトル生成 ===
-basename = os.path.basename(md_file)
-raw_title = os.path.splitext(basename)[0]
-title = re.sub(r'^\d{8}_?', '', raw_title)
 # === Markdown → HTML変換 ===
 with open(md_file, encoding="utf-8") as f:
     content_md = f.read()
@@ -28,11 +32,8 @@ content_html = markdown.markdown(content_md)
 
 # === 危険タグ・属性・コードスニペットの除去関数 ===
 def sanitize_html(html: str) -> str:
-    # 危険なタグを除去
     html = re.sub(r"<(script|iframe|style|svg).*?>.*?</\1>", "", html, flags=re.IGNORECASE | re.DOTALL)
-    # コードブロックを除去（```〜```）
     html = re.sub(r"```.*?```", "", html, flags=re.DOTALL)
-    # 危険な属性（onload, onclick など）
     html = re.sub(r'on\w+=".*?"', "", html, flags=re.IGNORECASE)
     return html
 
@@ -47,7 +48,7 @@ if len(content_html) > MAX_LENGTH:
 # === SEO用メタ情報 ===
 aioseo_title = f"{title} | OtomosaBlog"
 aioseo_description = content_md.strip().replace('\n', '').replace('#', '').strip()
-aioseo_description = aioseo_description[:120]  # 長すぎると弾かれるため制限
+aioseo_description = aioseo_description[:120]
 
 # === 投稿ペイロード生成 ===
 payload = {
@@ -65,7 +66,5 @@ with open("payload.json", "w", encoding="utf-8") as f:
     json.dump(payload, f, ensure_ascii=False, indent=2)
 
 print("✅ payload.json を出力しました")
-
-# === 内容プレビュー ===
 print("=== payload.json preview ===")
 print(json.dumps(payload, ensure_ascii=False, indent=2))
