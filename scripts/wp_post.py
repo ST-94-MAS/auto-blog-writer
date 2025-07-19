@@ -35,7 +35,7 @@ clean_md = re.sub(r'#\s*', '', content_md).replace('\n', '').strip()
 # === HTML変換（先に画像タグ修正も） ===
 def preprocess_md(md: str) -> str:
     # 画像タグの src="", alt="" が欠けるケースに備えて代替処理
-    md = re.sub(r'!\[\]\((.*?)\)', r'<img src="\1" alt="画像" />', md)
+    # md = re.sub(r'!\[\]\((.*?)\)', r'<img src="\1" alt="画像" />', md)
     return md
 
 html_source = preprocess_md(content_md)
@@ -66,8 +66,8 @@ payload = {
     "content": content_html,
     "status": "publish",
     "meta": {
-        "aioseo_title": aioseo_title,
-        "aioseo_description": aioseo_description
+        "_aioseo_title": aioseo_title,
+        "_aioseo_description": aioseo_description
     }
 }
 
