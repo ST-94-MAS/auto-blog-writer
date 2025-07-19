@@ -19,7 +19,6 @@ def main():
         sys.exit(1)
     openai.api_key = api_key
 
-    # キーワードCSV読み込み
     try:
         with open("keywords.csv", encoding="utf-8") as f:
             reader = csv.reader(f)
@@ -33,9 +32,8 @@ def main():
 
     selected_keywords = random.sample(keywords, k=random.randint(1, 4))
     keyword = ", ".join(selected_keywords)
-    keyword_for_img = selected_keywords[0]  # 最初のキーワードを画像タグ用に使う
+    keyword_for_img = selected_keywords[0]
 
-    # プロンプト組み立て
     prompt = f"""
 あなたはプロの日本語技術ブログライターです。
 以下の条件に基づき、HTML形式のWordPress用記事を書いてください。
@@ -51,12 +49,10 @@ def main():
   ・本文は<h2><h3>構成＋PREP法（Point→Reason→Example→Point再提示）
   ・<ul> <ol> <table>など視覚的表現を活用
   ・画像は最低1枚必ず含めてください。
-    例: <img src="https://source.unsplash.com/800x600/?{keyword_for_img}" alt="{keyword_for_img}のイメージ" />
+    <img src="https://source.unsplash.com/800x600/?{keyword_for_img}" alt="{keyword_for_img}のイメージ" />
+    ※画像URLは実在するURL（Unsplash API）で、空のimgタグやダミーURLは使わないでください
   ・コード例（AWS CDK / GitHub Actions など）も活用可能
   ・最後に<h2>まとめ</h2>で要点を整理してください
-
-【文字数】
-- 可能な限り詳細に記述してください（最大長にこだわる必要はありません）
 """
 
     try:
@@ -78,7 +74,6 @@ def main():
 
     content = resp.choices[0].message.content.strip()
 
-    # === タイトル抽出 ===
     title = "Untitled"
     match_md = re.search(r'^# (.+)', content, re.MULTILINE)
     match_html = re.search(r'<title>(.+?)</title>', content, re.IGNORECASE) or \
@@ -89,7 +84,6 @@ def main():
     elif match_html:
         title = match_html.group(1).strip()
 
-    # ファイル名整形
     safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '-')
     safe_title = safe_title[:50]
 
@@ -102,7 +96,7 @@ def main():
     print(f"✅ Markdown saved: {filename}")
     print(f"📌 タイトル: {title}")
 
-    # タイトル保存
+    # タイトル保存（SEOにも利用）
     os.makedirs("meta", exist_ok=True)
     with open("meta/title.txt", "w", encoding="utf-8") as f:
         f.write(title)

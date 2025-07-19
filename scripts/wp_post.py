@@ -25,18 +25,26 @@ if not md_files:
     sys.exit(1)
 md_file = md_files[-1]
 
-# === Markdown → HTML変換 ===
+# === Markdown 読込・整形 ===
 with open(md_file, encoding="utf-8") as f:
     content_md = f.read()
-content_html = markdown.markdown(content_md)
+
+# Markdown内にある不要な`#`を削除（description用）
+clean_md = re.sub(r'#\s*', '', content_md).replace('\n', '').strip()
+
+# === HTML変換（先に画像タグ修正も） ===
+def preprocess_md(md: str) -> str:
+    # 画像タグの src="", alt="" が欠けるケースに備えて代替処理
+    md = re.sub(r'!\[\]\((.*?)\)', r'<img src="\1" alt="画像" />', md)
+    return md
+
+html_source = preprocess_md(content_md)
+content_html = markdown.markdown(html_source)
 
 # === 危険タグ・属性・コードスニペットの除去関数 ===
 def sanitize_html(html: str) -> str:
-    # script / iframe / svg / style タグ除去
     html = re.sub(r"<(script|iframe|style|svg).*?>.*?</\1>", "", html, flags=re.IGNORECASE | re.DOTALL)
-    # ```コード``` スニペット除去
     html = re.sub(r"```.*?```", "", html, flags=re.DOTALL)
-    # onmouseover 等のJS属性除去
     html = re.sub(r'on\w+=".*?"', "", html, flags=re.IGNORECASE)
     return html
 
@@ -50,8 +58,7 @@ if len(content_html) > MAX_LENGTH:
 
 # === SEO用メタ情報 ===
 aioseo_title = f"{title} | OtomosaBlog"
-aioseo_description = content_md.strip().replace('\n', '').replace('#', '').strip()
-aioseo_description = aioseo_description[:120]
+aioseo_description = clean_md[:120]
 
 # === 投稿ペイロード生成 ===
 payload = {
