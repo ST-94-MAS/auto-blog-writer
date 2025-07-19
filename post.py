@@ -64,7 +64,7 @@ def main():
                 {"role": "system", "content": "You are a helpful technical writer."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=2000,
+            max_tokens=8192,
             temperature=0.7,
         )
     except RateLimitError:
