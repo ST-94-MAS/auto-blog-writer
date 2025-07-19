@@ -97,5 +97,10 @@ def main():
     print(f"✅ Markdown saved: {filename}")
     print(f"📌 タイトル: {title}")
 
+    # タイトルを meta/title.txt に保存（wp_post.py で使用するため）
+    os.makedirs("meta", exist_ok=True)
+    with open("meta/title.txt", "w", encoding="utf-8") as f:
+        f.write(title)
+
 if __name__ == "__main__":
     main()
