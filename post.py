@@ -12,7 +12,6 @@ import re
 from openai.error import RateLimitError, OpenAIError
 
 def main():
-    # .env ファイルから環境変数を読み込む
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -20,7 +19,7 @@ def main():
         sys.exit(1)
     openai.api_key = api_key
 
-    # キーワード CSV を読み込んでリスト化
+    # キーワードCSV読み込み
     try:
         with open("keywords.csv", encoding="utf-8") as f:
             reader = csv.reader(f)
@@ -32,31 +31,32 @@ def main():
         print("Error: keywords.csv にキーワードがありません", file=sys.stderr)
         sys.exit(1)
 
-    # ランダムに 1〜4 個のキーワードを選ぶ
     selected_keywords = random.sample(keywords, k=random.randint(1, 4))
     keyword = ", ".join(selected_keywords)
+    keyword_for_img = selected_keywords[0]  # 最初のキーワードを画像タグ用に使う
 
-    # プロンプトを組み立て（<html>全体ではなく本文構造のみ生成するよう指示）
+    # プロンプト組み立て
     prompt = f"""
-あなたはプロの技術ブログライターです。
-以下のキーワードに沿って、WordPress用の記事を日本語で執筆してください。
+あなたはプロの日本語技術ブログライターです。
+以下の条件に基づき、HTML形式のWordPress用記事を書いてください。
 
-・キーワード: {keyword}
-・WordPressのHTML編集モードに貼れる形式で、
-  「<body>内のコンテンツ部分（h1/h2/p/img/tableなど）」のみを生成してください。
-・<html> や <head> などの全体構造タグは出力しないでください。
+【キーワード】{keyword}
 
-構成:
-① タイトル（h1）検索キーワードを含める
-② 導入文（リード文）キーワードを自然に1～2回含める
-③ 見出し構成（h2 > h3 > h4...の構造を守る）
-④ 本文は PREP法（Point→Reason→Example→Point再提示）で記述
-⑤ 箇条書き・表・画像を活用（ul / ol、<table>、alt付き画像を使う）
-⑥ まとめ（Conclusion）で記事の要点を端的にまとめる
+【条件】
+- <html> や <head> は出力しないでください（<body>内のコンテンツのみ）
+- WordPress の HTML編集モードに直接貼り付けられる形式で書いてください
+- 以下のHTML構造を守る：
+  ・<h1>タイトル（キーワード含む）</h1>
+  ・導入文（<p>タグ、キーワード自然に1〜2回使用）
+  ・本文は<h2><h3>構成＋PREP法（Point→Reason→Example→Point再提示）
+  ・<ul> <ol> <table>など視覚的表現を活用
+  ・画像は最低1枚必ず含めてください。
+    例: <img src="https://source.unsplash.com/800x600/?{keyword_for_img}" alt="{keyword_for_img}のイメージ" />
+  ・コード例（AWS CDK / GitHub Actions など）も活用可能
+  ・最後に<h2>まとめ</h2>で要点を整理してください
 
-文字数：9000字程度
-画像は必ず1つ以上含める
-コード例（AWS CDK / GitHub Actionsなど）を必要に応じて含める
+【文字数】
+- 約9000文字
 """
 
     try:
@@ -80,9 +80,7 @@ def main():
 
     # === タイトル抽出 ===
     title = "Untitled"
-    # Markdown形式 (# タイトル)
     match_md = re.search(r'^# (.+)', content, re.MULTILINE)
-    # HTML形式 <title> や <h1>
     match_html = re.search(r'<title>(.+?)</title>', content, re.IGNORECASE) or \
                  re.search(r'<h1>(.+?)</h1>', content, re.IGNORECASE)
 
@@ -91,11 +89,10 @@ def main():
     elif match_html:
         title = match_html.group(1).strip()
 
-    # ファイル名用に整形
+    # ファイル名整形
     safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '-')
-    safe_title = safe_title[:50]  # 長すぎるファイル名を制限（任意）
+    safe_title = safe_title[:50]
 
-    # Markdown ファイル保存
     today = datetime.date.today().isoformat()
     os.makedirs("posts", exist_ok=True)
     filename = f"posts/{today}-{safe_title}.md"
@@ -105,7 +102,7 @@ def main():
     print(f"✅ Markdown saved: {filename}")
     print(f"📌 タイトル: {title}")
 
-    # タイトルを meta/title.txt に保存（wp_post.py で使用）
+    # タイトル保存
     os.makedirs("meta", exist_ok=True)
     with open("meta/title.txt", "w", encoding="utf-8") as f:
         f.write(title)
