@@ -43,14 +43,12 @@ def main():
 【条件】
 - <html> や <head> は出力しないでください（<body>内のコンテンツのみ）
 - WordPress の HTML編集モードに直接貼り付けられる形式で書いてください
+- 文字数は6000文字程度で記載してください。
 - 以下のHTML構造を守る：
   ・<h1>タイトル（キーワード含む）</h1>
   ・導入文（<p>タグ、キーワード自然に1〜2回使用）
   ・本文は<h2><h3>構成＋PREP法（Point→Reason→Example→Point再提示）
   ・<ul> <ol> <table>など視覚的表現を活用
-  ・画像は最低1枚必ず含めてください。
-    <img src="https://source.unsplash.com/800x600/?{keyword_for_img}" alt="{keyword_for_img}のイメージ" />
-    ※画像URLは実在するURL（Unsplash API）で、空のimgタグやダミーURLは使わないでください
   ・コード例（AWS CDK / GitHub Actions など）も活用可能
   ・最後に<h2>まとめ</h2>で要点を整理してください
 """
