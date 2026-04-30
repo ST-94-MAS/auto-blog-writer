@@ -44,54 +44,37 @@ def is_similar_title(title, existing_titles, threshold=0.72):
     return False
 
 
-def load_history_csv(path="keywords.csv"):
-    if not os.path.exists(path):
-        print(f"Error: {path} が見つかりません", file=sys.stderr)
-        sys.exit(1)
-
-    with open(path, encoding="utf-8", newline="") as f:
-        sample = f.read(2048)
-        f.seek(0)
-        
-        # サンプルにコンマやタブがあるかチェック（Snifferの失敗を回避）
-        has_delimiter = ',' in sample or '\t' in sample
-        has_header = False
-        
-        if has_delimiter:
-            try:
-                has_header = csv.Sniffer().has_header(sample)
-            except csv.Error:
-                has_header = False
-        
-        f.seek(0)
-
-        rows = []
-        categories = []
-        titles = []
-
-        if has_header:
-            reader = csv.DictReader(f)
-            for row in reader:
-                row = {k.strip().lower(): (v or "").strip() for k, v in row.items() if k}
-                category = row.get("category", "")
-                title = row.get("title", "")
-                theme = row.get("theme", "")
-                date = row.get("date", "")
-                rows.append({"title": title, "category": category, "theme": theme, "date": date})
-                if category:
-                    categories.append(category)
-                if title:
-                    titles.append(title)
-        else:
-            reader = csv.reader(f)
-            for row in reader:
-                if not row:
-                    continue
-                category = row[0].strip()
-                rows.append({"title": "", "category": category, "theme": "", "date": ""})
-                categories.append(category)
-
-    return rows, categories, titles, has_header
+def load_keywords_files():
+    """3つのキーワードファイルを読み込む"""
+    base_keywords = []
+    intent_keywords = []
+    context_keywords = []
+    
+    # keywords_base.csv
+    if os.path.exists("keywords_base.csv"):
+        with open("keywords_base.csv", encoding="utf-8", newline="") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    base_keywords.append(line)
+    
+    # keywords_intent.csv
+    if os.path.exists("keywords_intent.csv"):
+        with open("keywords_intent.csv", encoding="utf-8", newline="") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    intent_keywords.append(line)
+    
+    # keywords_context.csv
+    if os.path.exists("keywords_context.csv"):
+        with open("keywords_context.csv", encoding="utf-8", newline="") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    context_keywords.append(line)
+    
+    return base_keywords, intent_keywords, context_keywords
 
 
 def append_history_csv(record, path="keywords.csv", has_header=False):
@@ -149,21 +132,30 @@ def choose_theme(previous_theme):
     return random.choice(available) if available else random.choice(theme_types)
 
 
-def build_prompt(keywords, theme_type):
-    keyword_str = ", ".join(keywords)
-    return f"""
-あなたはプロの日本語技術ブログライターです。
-以下の条件に基づき、HTML形式のWordPress用記事を書いてください。
-
-【キーワード】{keyword_str}
-【切り口】{theme_type}
-
-【条件】
-- <html> や <head> は出力しないでください（<body>内のコンテンツのみ）
-- WordPress の HTML編集モードに直接貼り付けられる形式で書いてください
-- できる限り記載してください。
-- 指定したキーワードはテーマとして活用するが、タイトルと本文では完全一致の文字列を避け、類義語や言い換えで表現してください。
-- 過去30記事と近いタイトル・内容にならないよう、新しい視点と切り口を意識してください。
+def build_pcombined_keywords(base_keywords, intent_keywords, context_keywords, last_base, last_intent, last_context):
+    """ベース + 意図 + 文脈を組み合わせて選択"""
+    # ベースキーワードを選択（前回と異なるものを優先）
+    available_base = [k for k in base_keywords if k != last_base]
+    if not available_base:
+        available_base = base_keywords[:]
+    selected_base = random.choice(available_base)
+    
+    # 意図キーワードを選択（前回と異なるものを優先）
+    available_intent = [k for k in intent_keywords if k != last_intent]
+    if not available_intent:
+        available_intent = intent_keywords[:]
+    selected_intent = random.choice(available_intent)
+    
+    # 文脈キーワードを選択（前回と異なるものを優先）
+    available_context = [k for k in context_keywords if k != last_context]
+    if not available_context:
+        available_context = context_keywords[:]
+    selected_context = random.choice(available_context)
+    
+    # 組み合わせたキーワード文字列を作成
+    combined_keywords = [selected_base, selected_intent, selected_context]
+    
+    return combined_keywords, selected_base, selected_intent, selected_context
 - 似たタイトルは使わず、他の記事と重ならないようにしてください。
 - 同じテーマでも「初心者向け」「エラー対処」「比較」「手順」の視点を明確に区別してください。
 - 以下のHTML構造を守る：
@@ -172,64 +164,53 @@ def build_prompt(keywords, theme_type):
   ・本文は<h2><h3>構成＋PREP法（Point→Reason→Example→Point再提示）
   ・<ul> <ol> <table>など視覚的表現を活用
   ・コード例（AWS CDK / GitHub Actions など）も活用可能
-  ・最後に<h2>まとめ</h2>で要点を整理してください
+  ・最後に<h2>まとめ</h2>で要点を整理してください。
 """
 
 
-def call_openai_with_retry(prompt, max_retries=3):
-    """OpenAI API を呼び出し、エラー時はリトライする"""
-    for attempt in range(max_retries):
-        try:
-            resp = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a helpful technical writer."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=8192,
-                temperature=0.7,
-            )
-            return resp
-        except RateLimitError as e:
-            print(f"⚠️ レートリミット（リトライ {attempt + 1}/{max_retries}）: {e}", file=sys.stderr)
-            if attempt == max_retries - 1:
-                raise
-            wait_time = 5 * (attempt + 1)
-            print(f"⏳ {wait_time}秒待機中...", file=sys.stderr)
-            time.sleep(wait_time)
-        except OpenAIError as e:
-            print(f"⚠️ API エラー（リトライ {attempt + 1}/{max_retries}）: {e}", file=sys.stderr)
-            if attempt == max_retries - 1:
-                raise
-            wait_time = 5 * (attempt + 1)
-            print(f"⏳ {wait_time}秒待機中...", file=sys.stderr)
-            time.sleep(wait_time)
-
-def main():
-    load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        print("Error: 環境変数 OPENAI_API_KEY が設定されていません", file=sys.stderr)
+def generate_image_with_openai(prompt, title):
+    """OpenAI DALL-E で画像を生成"""
+    try:
+        image_prompt = f"Create an illustration for a technical blog post titled '{title}'. The image should be professional and related to: {prompt}. Style: clean, modern, technology-focused."
+        
+        response = openai.Image.create(
+            prompt=image_prompt,
+            n=1,
+            size="1024x1024"
+        )
+        
+        image_url = response['data'][0]['url']
+        return image_url
+    except Exception as e:
+        print(f"⚠️ 画像生成エラー: {e}", file=sys.stderr)
+        return None
+# 3つのキーワードファイルを読み込み
+    base_keywords, intent_keywords, context_keywords = load_keywords_files()
+    if not base_keywords or not intent_keywords or not context_keywords:
+        print("Error: キーワードファイルが不足しています", file=sys.stderr)
         sys.exit(1)
-    openai.api_key = api_key
 
+    # 過去の履歴を読み込み（既存のkeywords.csvを使用）
     history_rows, categories, past_titles, csv_has_header = load_history_csv("keywords.csv")
-    if not categories:
-        print("Error: keywords.csv にカテゴリ情報がありません", file=sys.stderr)
-        sys.exit(1)
 
-    last_category = history_rows[-1].get("category") if history_rows and history_rows[-1].get("category") else load_last_meta("last_category.txt")
-    last_theme = history_rows[-1].get("theme") if history_rows and history_rows[-1].get("theme") else load_last_meta("last_theme.txt")
+    # 前回の選択を取得
+    last_base = load_last_meta("last_base.txt")
+    last_intent = load_last_meta("last_intent.txt")
+    last_context = load_last_meta("last_context.txt")
 
     selected_keywords = None
-    selected_theme = None
+    selected_base = None
+    selected_intent = None
+    selected_context = None
     content = None
     title = "Untitled"
 
     for attempt in range(6):
-        selected_keywords = choose_topic(categories, last_category)
-        selected_theme = choose_theme(last_theme)
-        prompt = build_prompt(selected_keywords, selected_theme)
+        # 組み合わせキーワードを選択
+        selected_keywords, selected_base, selected_intent, selected_context = choose_combined_keywords(
+            base_keywords, intent_keywords, context_keywords, last_base, last_intent, last_context
+        )
+        prompt = build_prompt(selected_keywords)
 
         try:
             resp = call_openai_with_retry(prompt)
@@ -252,20 +233,33 @@ def main():
         print("Error: 適切な記事タイトルを持つコンテンツを生成できませんでした", file=sys.stderr)
         sys.exit(1)
 
-    category = selected_keywords[0]
+    # 履歴を更新
     append_history_csv({
         "title": title,
-        "category": category,
-        "theme": selected_theme,
+        "category": selected_base,  # ベースキーワードをカテゴリとして保存
+        "theme": f"{selected_intent} {selected_context}",  # 意図+文脈をテーマとして保存
         "date": datetime.date.today().isoformat()
     }, path="keywords.csv", has_header=csv_has_header)
-    save_last_meta("last_category.txt", category)
-    save_last_meta("last_theme.txt", selected_theme)
-    save_last_meta("theme.txt", selected_theme)
-    save_last_meta("category.txt", category)
+    
+    # メタ情報を保存
+    save_last_meta("last_base.txt", selected_base)
+    save_last_meta("last_intent.txt", selected_intent)
+    save_last_meta("last_context.txt", selected_context)
+    save_last_meta("theme.txt", f"{selected_intent} {selected_context}")
+    save_last_meta("category.txt", selected_base)
 
     safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '-')
     safe_title = safe_title[:50]
+
+    today = datetime.date.today().isoformat()
+    os.makedirs("posts", exist_ok=True)
+    filename = f"posts/{today}-{safe_title}.md"
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    print(f"✅ Markdown saved: {filename}")
+    print(f"📌 タイトル: {title}")
+    print(f"🔑 キーワード: {' '.join(selected_keywords)[:50]
 
     today = datetime.date.today().isoformat()
     os.makedirs("posts", exist_ok=True)

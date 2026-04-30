@@ -10,14 +10,15 @@ import json
 import sys
 import re
 import datetime
+import base64
 
-# === 投稿タイトルの読み込み ===
+# === 画像URLの読み込み（オプション） ===
+image_url = None
 try:
-    with open("meta/title.txt", encoding="utf-8") as f:
-        title = f.read().strip()
+    with open("meta/image_url.txt", encoding="utf-8") as f:
+        image_url = f.read().strip()
 except FileNotFoundError:
-    print("❌ Error: meta/title.txt が見つかりません", file=sys.stderr)
-    sys.exit(1)
+    pass
 
 # === 本日のMarkdownファイル確認 ===
 today = datetime.date.today().isoformat()
@@ -64,16 +65,38 @@ if len(content_html) > MAX_LENGTH:
 aioseo_title = f"{title} | OtomosaBlog"
 aioseo_description = clean_md[:120]
 
-# === 投稿ペイロード生成 ===
-payload = {
-    "title": title,
-    "content": content_html,
-    "status": "publish",
-    "meta": {
-        "_aioseo_title": aioseo_title,
-        "_aioseo_description": aioseo_description
-    }
-}
+# === 画像処理（生成された画像がある場合） ===
+featured_media_id = None
+if image_url:
+    print("🖼️ WordPressに画像をアップロード中...")
+    try:
+        # 画像をダウンロード
+        import requests
+        image_response = requests.get(image_url)
+        if image_response.status_code == 200:
+ 
+
+# アイキャッチ画像を設定
+if featured_media_id:
+    payload["featured_media"] = featured_media_id           # WordPressメディアライブラリにアップロード
+            wp_upload_url = f"{wp_url}/wp-json/wp/v2/media"
+            files = {
+                'file': ('generated-image.png', image_response.content, 'image/png')
+            }
+            headers = {
+                'Authorization': f'Basic {base64.b64encode(f"{wp_username}:{wp_app_password}".encode()).decode()}'
+            }
+            
+            upload_response = requests.post(wp_upload_url, files=files, headers=headers)
+            if upload_response.status_code == 201:
+                featured_media_id = upload_response.json().get('id')
+                print(f"✅ 画像アップロード完了 (ID: {featured_media_id})")
+            else:
+                print(f"⚠️ 画像アップロード失敗: {upload_response.status_code}", file=sys.stderr)
+        else:
+            print("⚠️ 画像ダウンロード失敗", file=sys.stderr)
+    except Exception as e:
+        print(f"⚠️ 画像処理エラー: {e}", file=sys.stderr)
 
 # === JSONファイルとして保存 ===
 with open("payload.json", "w", encoding="utf-8") as f:
