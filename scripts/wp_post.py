@@ -9,6 +9,7 @@ import markdown
 import json
 import sys
 import re
+import datetime
 
 # === 投稿タイトルの読み込み ===
 try:
@@ -18,12 +19,15 @@ except FileNotFoundError:
     print("❌ Error: meta/title.txt が見つかりません", file=sys.stderr)
     sys.exit(1)
 
-# === 最新 Markdown ファイル検出 ===
-md_files = sorted(glob.glob("posts/*.md"))
-if not md_files:
-    print("❌ Error: No markdown files found in posts/", file=sys.stderr)
+# === 本日のMarkdownファイル確認 ===
+today = datetime.date.today().isoformat()
+today_md_files = glob.glob(f"posts/{today}-*.md")
+
+if not today_md_files:
+    print(f"❌ Error: 本日のMarkdownファイルが見つかりません（posts/{today}-*.md）", file=sys.stderr)
     sys.exit(1)
-md_file = md_files[-1]
+
+md_file = today_md_files[0]  # 本日のファイルを使用
 
 # === Markdown 読込・整形 ===
 with open(md_file, encoding="utf-8") as f:
