@@ -58,3 +58,4 @@ jobs:
           git add posts/ payload.json
           git diff --quiet || git commit -m "chore: 自動生成記事を追加"
           git push
+
