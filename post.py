@@ -52,7 +52,11 @@ def load_history_csv(path="keywords.csv"):
     with open(path, encoding="utf-8", newline="") as f:
         sample = f.read(2048)
         f.seek(0)
-        has_header = csv.Sniffer().has_header(sample)
+        try:
+            has_header = csv.Sniffer().has_header(sample)
+        except csv.Error:
+            # デリミタを判定できない場合は旧形式と判定
+            has_header = False
         f.seek(0)
 
         rows = []
