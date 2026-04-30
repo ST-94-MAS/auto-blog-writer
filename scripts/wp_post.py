@@ -23,13 +23,18 @@ except FileNotFoundError:
 
 # === 本日のMarkdownファイル確認 ===
 today = datetime.date.today().isoformat()
-today_md_files = glob.glob(f"posts/{today}-*.md")
+today_md_files = sorted(glob.glob(f"posts/{today}-*.md"))
 
-if not today_md_files:
-    print(f"❌ Error: 本日のMarkdownファイルが見つかりません（posts/{today}-*.md）", file=sys.stderr)
-    sys.exit(1)
-
-md_file = today_md_files[0]  # 本日のファイルを使用
+if today_md_files:
+    md_file = today_md_files[-1]  # 本日の最新ファイルを使用
+else:
+    recent_md_files = sorted(glob.glob("posts/*.md"))
+    if recent_md_files:
+        md_file = recent_md_files[-1]
+        print(f"⚠️ 本日のMarkdownファイルが見つかりませんでした。最新の投稿ファイルを代替使用します: {md_file}", file=sys.stderr)
+    else:
+        print(f"❌ Error: Markdownファイルが見つかりません（posts/{today}-*.md または posts/*.md）", file=sys.stderr)
+        sys.exit(1)
 
 # === Markdown 読込・整形 ===
 with open(md_file, encoding="utf-8") as f:
