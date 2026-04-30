@@ -223,32 +223,44 @@ def choose_combined_keywords(base_keywords, intent_keywords, context_keywords, l
     return combined_keywords, selected_base, selected_intent, selected_context
 
 
-def build_prompt(combined_keywords):
+def build_title_prompt(combined_keywords):
+    keyword_str = " ".join(combined_keywords)
+    return f"""
+あなたはプロの日本語技術ブログライターです。
+以下の条件に基づき、記事タイトルを1つだけ出力してください。
+
+【キーワード】{keyword_str}
+
+【条件】
+- 記事タイトルは日本語で書き、技術ブログに適したものにしてください。
+- 目次や本文は不要です。タイトルのみを出力してください。
+- キーワードを自然に含めつつ、魅力的で具体的なタイトルにしてください。
+- 過去のタイトルと似ないようにしてください。
+"""
+
+
+def build_article_prompt(title, combined_keywords):
     keyword_str = " ".join(combined_keywords)
     return f"""
 あなたはプロの日本語技術ブログライターです。
 以下の条件に基づき、HTML形式のWordPress用記事を書いてください。
 
+【タイトル】{title}
 【キーワード】{keyword_str}
 
 【条件】
-- <html> や <head> は出力しないでください（<body>内のコンテンツのみ）
-- WordPress の HTML編集モードに直接貼り付けられる形式で書いてください
-- できる限り記載してください。
-- 指定したキーワードはテーマとして活用するが、タイトルと本文では完全一致の文字列を避け、類義語や言い換えで表現してください。
-- まずは本文の冒頭に<title>と同じ意味で<h1>タイトルを必ず表示してください。
-- 本文はそのタイトルの内容を具体的に説明し、タイトルと本文が一致するようにしてください。
+- まず冒頭に <h1>{title}</h1> を必ず書いてください。
+- そのタイトルの内容を本文全体で具体的に説明し、タイトルと本文が一致するようにしてください。
+- 本文はタイトルの意図を深掘りし、別の事例や独自の切り口を必ず含めてください。
 - 過去30記事と近いタイトル・内容にならないよう、新しい視点と切り口を意識してください。
 - 似たタイトルは使わず、他の記事と重ならないようにしてください。
-- 本文は別の事例や独自の切り口を必ず含めてください。
-- 以下のHTML構造を守る：
-  ・<h1>タイトル（キーワード含む）</h1>
-  ・導入文（<p>タグ、キーワード自然に1〜2回使用）
-  ・本文は<h2><h3>構成＋PREP法（Point→Reason→Example→Point再提示）
-  ・<ul> <ol> <table>など視覚的表現を活用
-  ・コード例（AWS CDK / GitHub Actions など）も活用可能
-  ・最後に<h2>まとめ</h2>で要点を整理してください
+- WordPressのHTML編集モードに直接貼り付けられる形式で書いてください。
+- <html> や <head> は出力しないでください。
+- <p>, <h2>, <h3>, <ul>, <ol>, <table> などを活用し、読みやすい構成にしてください。
+- できる限り具体的な事例や図解説明を含めてください。
+- 最後に <h2>まとめ</h2> で要点を整理してください。
 """
+
 
 def call_openai_with_retry(prompt, max_retries=3):
     """OpenAI API を呼び出し、エラー時はリトライする"""
@@ -332,22 +344,38 @@ def main():
         selected_keywords, selected_base, selected_intent, selected_context = choose_combined_keywords(
             base_keywords, intent_keywords, context_keywords, last_base, last_intent, last_context
         )
-        prompt = build_prompt(selected_keywords)
 
+        title_prompt = build_title_prompt(selected_keywords)
         try:
-            resp = call_openai_with_retry(prompt)
+            title_resp = call_openai_with_retry(title_prompt)
         except (RateLimitError, OpenAIError) as e:
             print(f"Error: OpenAI API リクエストが失敗しました（3回のリトライ後）: {e}", file=sys.stderr)
             sys.exit(1)
 
-        content = resp.choices[0].message.content.strip()
-        title = extract_title(content) or "Untitled"
+        title = title_resp.choices[0].message.content.strip().splitlines()[0].strip()
+        title = re.sub(r'^["\']?(.*?)["\']?$', r'\1', title).strip()
 
-        if title == "Untitled":
-            print(f"⚠️ タイトルが抽出できませんでした。リトライ {attempt + 1}/6", file=sys.stderr)
+        if not title:
+            print(f"⚠️ タイトルが生成できませんでした。リトライ {attempt + 1}/6", file=sys.stderr)
             continue
         if is_similar_title(title, past_titles):
             print(f"⚠️ 類似タイトルが検出されました: {title}. リトライ {attempt + 1}/6", file=sys.stderr)
+            continue
+
+        article_prompt = build_article_prompt(title, selected_keywords)
+        try:
+            article_resp = call_openai_with_retry(article_prompt)
+        except (RateLimitError, OpenAIError) as e:
+            print(f"Error: OpenAI API リクエストが失敗しました（3回のリトライ後）: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        content = article_resp.choices[0].message.content.strip()
+
+        if title not in content:
+            print(f"⚠️ 生成された本文にタイトルが含まれていません。リトライ {attempt + 1}/6", file=sys.stderr)
+            continue
+        if "<h1>" not in content:
+            print(f"⚠️ 生成された本文に<h1>タグがありません。リトライ {attempt + 1}/6", file=sys.stderr)
             continue
         if is_similar_content(content, existing_contents):
             print(f"⚠️ 類似本文が検出されました。リトライ {attempt + 1}/6", file=sys.stderr)
