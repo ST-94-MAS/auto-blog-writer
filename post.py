@@ -115,6 +115,54 @@ def save_last_meta(name, value):
         f.write(value)
 
 
+def load_history_csv(path="keywords.csv"):
+    if not os.path.exists(path):
+        print(f"Error: {path} が見つかりません", file=sys.stderr)
+        sys.exit(1)
+
+    with open(path, encoding="utf-8", newline="") as f:
+        sample = f.read(2048)
+        f.seek(0)
+
+        has_delimiter = ',' in sample or '\t' in sample
+        has_header = False
+
+        if has_delimiter:
+            try:
+                has_header = csv.Sniffer().has_header(sample)
+            except csv.Error:
+                has_header = False
+        f.seek(0)
+
+        rows = []
+        categories = []
+        titles = []
+
+        if has_header:
+            reader = csv.DictReader(f)
+            for row in reader:
+                row = {k.strip().lower(): (v or "").strip() for k, v in row.items() if k}
+                category = row.get("category", "")
+                title = row.get("title", "")
+                theme = row.get("theme", "")
+                date = row.get("date", "")
+                rows.append({"title": title, "category": category, "theme": theme, "date": date})
+                if category:
+                    categories.append(category)
+                if title:
+                    titles.append(title)
+        else:
+            reader = csv.reader(f)
+            for row in reader:
+                if not row:
+                    continue
+                category = row[0].strip()
+                rows.append({"title": "", "category": category, "theme": "", "date": ""})
+                categories.append(category)
+
+    return rows, categories, titles, has_header
+
+
 def choose_topic(categories, last_category):
     available = [c for c in categories if c != last_category]
     if not available:
@@ -132,68 +180,116 @@ def choose_theme(previous_theme):
     return random.choice(available) if available else random.choice(theme_types)
 
 
-def build_pcombined_keywords(base_keywords, intent_keywords, context_keywords, last_base, last_intent, last_context):
+def choose_combined_keywords(base_keywords, intent_keywords, context_keywords, last_base, last_intent, last_context):
     """ベース + 意図 + 文脈を組み合わせて選択"""
-    # ベースキーワードを選択（前回と異なるものを優先）
     available_base = [k for k in base_keywords if k != last_base]
     if not available_base:
         available_base = base_keywords[:]
     selected_base = random.choice(available_base)
-    
-    # 意図キーワードを選択（前回と異なるものを優先）
+
     available_intent = [k for k in intent_keywords if k != last_intent]
     if not available_intent:
         available_intent = intent_keywords[:]
     selected_intent = random.choice(available_intent)
-    
-    # 文脈キーワードを選択（前回と異なるものを優先）
+
     available_context = [k for k in context_keywords if k != last_context]
     if not available_context:
         available_context = context_keywords[:]
     selected_context = random.choice(available_context)
-    
-    # 組み合わせたキーワード文字列を作成
+
     combined_keywords = [selected_base, selected_intent, selected_context]
-    
     return combined_keywords, selected_base, selected_intent, selected_context
+
+
+def build_prompt(combined_keywords):
+    keyword_str = " ".join(combined_keywords)
+    return f"""
+あなたはプロの日本語技術ブログライターです。
+以下の条件に基づき、HTML形式のWordPress用記事を書いてください。
+
+【キーワード】{keyword_str}
+
+【条件】
+- <html> や <head> は出力しないでください（<body>内のコンテンツのみ）
+- WordPress の HTML編集モードに直接貼り付けられる形式で書いてください
+- できる限り記載してください。
+- 指定したキーワードはテーマとして活用するが、タイトルと本文では完全一致の文字列を避け、類義語や言い換えで表現してください。
+- 過去30記事と近いタイトル・内容にならないよう、新しい視点と切り口を意識してください。
 - 似たタイトルは使わず、他の記事と重ならないようにしてください。
-- 同じテーマでも「初心者向け」「エラー対処」「比較」「手順」の視点を明確に区別してください。
 - 以下のHTML構造を守る：
   ・<h1>タイトル（キーワード含む）</h1>
   ・導入文（<p>タグ、キーワード自然に1〜2回使用）
   ・本文は<h2><h3>構成＋PREP法（Point→Reason→Example→Point再提示）
   ・<ul> <ol> <table>など視覚的表現を活用
   ・コード例（AWS CDK / GitHub Actions など）も活用可能
-  ・最後に<h2>まとめ</h2>で要点を整理してください。
+  ・最後に<h2>まとめ</h2>で要点を整理してください
 """
 
+def call_openai_with_retry(prompt, max_retries=3):
+    """OpenAI API を呼び出し、エラー時はリトライする"""
+    for attempt in range(max_retries):
+        try:
+            resp = openai.ChatCompletion.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a helpful Japanese technical blog writer."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=8192,
+                temperature=0.7,
+            )
+            return resp
+
+        except RateLimitError as e:
+            print(f"⚠️ レートリミット（リトライ {attempt + 1}/{max_retries}）: {e}", file=sys.stderr)
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(5 * (attempt + 1))
+
+        except OpenAIError as e:
+            print(f"⚠️ APIエラー（リトライ {attempt + 1}/{max_retries}）: {e}", file=sys.stderr)
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(5 * (attempt + 1))
 
 def generate_image_with_openai(prompt, title):
     """OpenAI DALL-E で画像を生成"""
     try:
         image_prompt = f"Create an illustration for a technical blog post titled '{title}'. The image should be professional and related to: {prompt}. Style: clean, modern, technology-focused."
-        
-        response = openai.Image.create(
+        response = openai.images.generate(
+            model="gpt-image-1",
             prompt=image_prompt,
-            n=1,
             size="1024x1024"
         )
-        
-        image_url = response['data'][0]['url']
+        image_url = response.data[0].url
         return image_url
     except Exception as e:
         print(f"⚠️ 画像生成エラー: {e}", file=sys.stderr)
         return None
-# 3つのキーワードファイルを読み込み
+
+
+def insert_image_into_content(content, image_url, title):
+    image_tag = f'<img src="{image_url}" alt="{title}" style="max-width:100%; height:auto; margin:20px 0;" />'
+    if "<h1>" in content:
+        return content.replace("<h1>", f"{image_tag}\n<h1>", 1)
+    return f"{image_tag}\n\n{content}"
+
+
+def main():
+    load_dotenv()
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print("Error: 環境変数 OPENAI_API_KEY が設定されていません", file=sys.stderr)
+        sys.exit(1)
+    openai.api_key = api_key
+
     base_keywords, intent_keywords, context_keywords = load_keywords_files()
     if not base_keywords or not intent_keywords or not context_keywords:
         print("Error: キーワードファイルが不足しています", file=sys.stderr)
         sys.exit(1)
 
-    # 過去の履歴を読み込み（既存のkeywords.csvを使用）
     history_rows, categories, past_titles, csv_has_header = load_history_csv("keywords.csv")
 
-    # 前回の選択を取得
     last_base = load_last_meta("last_base.txt")
     last_intent = load_last_meta("last_intent.txt")
     last_context = load_last_meta("last_context.txt")
@@ -206,7 +302,6 @@ def generate_image_with_openai(prompt, title):
     title = "Untitled"
 
     for attempt in range(6):
-        # 組み合わせキーワードを選択
         selected_keywords, selected_base, selected_intent, selected_context = choose_combined_keywords(
             base_keywords, intent_keywords, context_keywords, last_base, last_intent, last_context
         )
@@ -233,15 +328,18 @@ def generate_image_with_openai(prompt, title):
         print("Error: 適切な記事タイトルを持つコンテンツを生成できませんでした", file=sys.stderr)
         sys.exit(1)
 
-    # 履歴を更新
+    image_url = generate_image_with_openai(" ".join(selected_keywords), title)
+    if image_url:
+        content = insert_image_into_content(content, image_url, title)
+        save_last_meta("image_url.txt", image_url)
+
     append_history_csv({
         "title": title,
-        "category": selected_base,  # ベースキーワードをカテゴリとして保存
-        "theme": f"{selected_intent} {selected_context}",  # 意図+文脈をテーマとして保存
+        "category": selected_base,
+        "theme": f"{selected_intent} {selected_context}",
         "date": datetime.date.today().isoformat()
     }, path="keywords.csv", has_header=csv_has_header)
-    
-    # メタ情報を保存
+
     save_last_meta("last_base.txt", selected_base)
     save_last_meta("last_intent.txt", selected_intent)
     save_last_meta("last_context.txt", selected_context)
@@ -259,18 +357,8 @@ def generate_image_with_openai(prompt, title):
 
     print(f"✅ Markdown saved: {filename}")
     print(f"📌 タイトル: {title}")
-    print(f"🔑 キーワード: {' '.join(selected_keywords)[:50]
+    print(f"🔑 キーワード: {' '.join(selected_keywords)}")
 
-    today = datetime.date.today().isoformat()
-    os.makedirs("posts", exist_ok=True)
-    filename = f"posts/{today}-{safe_title}.md"
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(content)
-
-    print(f"✅ Markdown saved: {filename}")
-    print(f"📌 タイトル: {title}")
-
-    # タイトル保存（SEOにも利用）
     os.makedirs("meta", exist_ok=True)
     with open("meta/title.txt", "w", encoding="utf-8") as f:
         f.write(title)
