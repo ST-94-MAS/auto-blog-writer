@@ -86,6 +86,13 @@ def append_history_csv(record, path="keywords.csv", has_header=False):
             writer.writerow(record)
         return
 
+    if not os.path.exists(path):
+        with open(path, encoding="utf-8", newline="", mode="w") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerow(record)
+        return
+
     # 旧形式のファイルをヘッダー付きDB形式に変換して追記
     existing_rows = []
     with open(path, encoding="utf-8", newline="") as f:
@@ -117,8 +124,7 @@ def save_last_meta(name, value):
 
 def load_history_csv(path="keywords.csv"):
     if not os.path.exists(path):
-        print(f"Error: {path} が見つかりません", file=sys.stderr)
-        sys.exit(1)
+        return [], [], [], False
 
     with open(path, encoding="utf-8", newline="") as f:
         sample = f.read(2048)
