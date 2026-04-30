@@ -44,6 +44,22 @@ def is_similar_title(title, existing_titles, threshold=0.72):
     return False
 
 
+def load_existing_contents(path_pattern="posts/*.md"):
+    contents = []
+    for path in glob.glob(path_pattern):
+        with open(path, encoding="utf-8") as f:
+            contents.append(normalize_text(f.read()))
+    return contents
+
+
+def is_similar_content(content, existing_contents, threshold=0.82):
+    normalized = normalize_text(content)
+    for old_content in existing_contents:
+        if difflib.SequenceMatcher(None, normalized, old_content).ratio() >= threshold:
+            return True
+    return False
+
+
 def load_keywords_files():
     """3つのキーワードファイルを読み込む"""
     base_keywords = []
@@ -220,8 +236,10 @@ def build_prompt(combined_keywords):
 - WordPress の HTML編集モードに直接貼り付けられる形式で書いてください
 - できる限り記載してください。
 - 指定したキーワードはテーマとして活用するが、タイトルと本文では完全一致の文字列を避け、類義語や言い換えで表現してください。
+- タイトルは本文の冒頭に<h1>として含めつつ、本文の本文はタイトルと重複しないようにしてください。
 - 過去30記事と近いタイトル・内容にならないよう、新しい視点と切り口を意識してください。
 - 似たタイトルは使わず、他の記事と重ならないようにしてください。
+- 本文は別の事例や独自の切り口を必ず含めてください。
 - 以下のHTML構造を守る：
   ・<h1>タイトル（キーワード含む）</h1>
   ・導入文（<p>タグ、キーワード自然に1〜2回使用）
@@ -295,6 +313,7 @@ def main():
         sys.exit(1)
 
     history_rows, categories, past_titles, csv_has_header = load_history_csv("keywords.csv")
+    existing_contents = load_existing_contents()
 
     last_base = load_last_meta("last_base.txt")
     last_intent = load_last_meta("last_intent.txt")
@@ -327,6 +346,9 @@ def main():
             continue
         if is_similar_title(title, past_titles):
             print(f"⚠️ 類似タイトルが検出されました: {title}. リトライ {attempt + 1}/6", file=sys.stderr)
+            continue
+        if is_similar_content(content, existing_contents):
+            print(f"⚠️ 類似本文が検出されました。リトライ {attempt + 1}/6", file=sys.stderr)
             continue
         break
 
