@@ -38,6 +38,14 @@ with open(md_file, encoding="utf-8") as f:
 # Markdown内にある不要な`#`を削除（description用）
 clean_md = re.sub(r'#\s*', '', content_md).replace('\n', '').strip()
 
+# === 投稿タイトルの読み込み（meta/title.txt） ===
+try:
+    with open("meta/title.txt", encoding="utf-8") as f:
+        title = f.read().strip()
+except FileNotFoundError:
+    print("❌ Error: meta/title.txt が見つかりません", file=sys.stderr)
+    sys.exit(1)
+
 # === HTML変換（先に画像タグ修正も） ===
 def preprocess_md(md: str) -> str:
     # 画像タグの src="", alt="" が欠けるケースに備えて代替処理
