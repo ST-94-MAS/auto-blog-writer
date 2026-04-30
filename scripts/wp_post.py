@@ -11,6 +11,7 @@ import sys
 import re
 import datetime
 import base64
+import requests
 
 # === 画像URLの読み込み（オプション） ===
 image_url = None
@@ -68,35 +69,52 @@ aioseo_description = clean_md[:120]
 # === 画像処理（生成された画像がある場合） ===
 featured_media_id = None
 if image_url:
-    print("🖼️ WordPressに画像をアップロード中...")
-    try:
-        # 画像をダウンロード
-        import requests
-        image_response = requests.get(image_url)
-        if image_response.status_code == 200:
- 
+    if requests is None:
+        print("⚠️ requests がインストールされていないため画像アップロードをスキップします", file=sys.stderr)
+    else:
+        print("🖼️ WordPressに画像をアップロード中...")
+        try:
+            wp_url = os.getenv("WP_URL")
+            wp_username = os.getenv("WP_USERNAME")
+            wp_app_password = os.getenv("WP_APP_PASSWORD")
 
-# アイキャッチ画像を設定
-if featured_media_id:
-    payload["featured_media"] = featured_media_id           # WordPressメディアライブラリにアップロード
-            wp_upload_url = f"{wp_url}/wp-json/wp/v2/media"
-            files = {
-                'file': ('generated-image.png', image_response.content, 'image/png')
-            }
-            headers = {
-                'Authorization': f'Basic {base64.b64encode(f"{wp_username}:{wp_app_password}".encode()).decode()}'
-            }
-            
-            upload_response = requests.post(wp_upload_url, files=files, headers=headers)
-            if upload_response.status_code == 201:
-                featured_media_id = upload_response.json().get('id')
-                print(f"✅ 画像アップロード完了 (ID: {featured_media_id})")
+            if not wp_url or not wp_username or not wp_app_password:
+                raise ValueError("WordPress接続情報が不足しています")
+
+            image_response = requests.get(image_url)
+            if image_response.status_code == 200:
+                wp_upload_url = f"{wp_url}/wp-json/wp/v2/media"
+                files = {
+                    'file': ('generated-image.png', image_response.content, 'image/png')
+                }
+                headers = {
+                    'Authorization': f'Basic {base64.b64encode(f"{wp_username}:{wp_app_password}".encode()).decode()}'
+                }
+
+                upload_response = requests.post(wp_upload_url, files=files, headers=headers)
+                if upload_response.status_code == 201:
+                    featured_media_id = upload_response.json().get('id')
+                    print(f"✅ 画像アップロード完了 (ID: {featured_media_id})")
+                else:
+                    print(f"⚠️ 画像アップロード失敗: {upload_response.status_code}", file=sys.stderr)
             else:
-                print(f"⚠️ 画像アップロード失敗: {upload_response.status_code}", file=sys.stderr)
-        else:
-            print("⚠️ 画像ダウンロード失敗", file=sys.stderr)
-    except Exception as e:
-        print(f"⚠️ 画像処理エラー: {e}", file=sys.stderr)
+                print("⚠️ 画像ダウンロード失敗", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️ 画像処理エラー: {e}", file=sys.stderr)
+
+# === 投稿ペイロード生成 ===
+payload = {
+    "title": title,
+    "content": content_html,
+    "status": "publish",
+    "meta": {
+        "_aioseo_title": aioseo_title,
+        "_aioseo_description": aioseo_description
+    }
+}
+
+if featured_media_id:
+    payload["featured_media"] = featured_media_id
 
 # === JSONファイルとして保存 ===
 with open("payload.json", "w", encoding="utf-8") as f:
