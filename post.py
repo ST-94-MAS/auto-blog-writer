@@ -45,8 +45,13 @@ def is_similar_title(title, existing_titles, threshold=0.72):
 
 def load_history_csv(path="keywords.csv"):
     if not os.path.exists(path):
-        print(f"Error: {path} が見つかりません", file=sys.stderr)
-        sys.exit(1)
+        fallback = "keywords_base.csv"
+        if os.path.exists(fallback):
+            print(f"Warning: {path} が見つかりません。{fallback} をカテゴリソースとして使用します。", file=sys.stderr)
+            path = fallback
+        else:
+            print(f"Error: {path} が見つかりません", file=sys.stderr)
+            sys.exit(1)
 
     with open(path, encoding="utf-8", newline="") as f:
         sample = f.read(2048)
