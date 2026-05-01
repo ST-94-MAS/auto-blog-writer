@@ -3,7 +3,7 @@ name: 自動ポスト生成＆WordPress公開
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'  # 毎日 09:00 JST に実行
+    - cron: '0 1,4,7,10,13 * * *'  # JST 10:00, 13:00, 16:00, 19:00, 22:00（UTC 1,4,7,10,13）
 
 jobs:
   generate_and_publish:
