@@ -37,9 +37,11 @@ jobs:
         run: python post.py
 
       - name: payload.json を生成（投稿データ＋SEOメタ）
+        if: steps.generate.outcome == 'success'
         run: python scripts/wp_post.py
 
       - name: WordPress に投稿（AIOSEO対応）
+        if: steps.generate.outcome == 'success'
         run: |
           echo "== CURLで投稿 =="
           curl -i -X POST \
@@ -49,10 +51,10 @@ jobs:
             "${WP_URL}/wp-json/wp/v2/posts"
 
       - name: 生成記事をコミット＆プッシュ
+        if: steps.generate.outcome == 'success'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add posts/ payload.json
           git diff --quiet || git commit -m "chore: 自動生成記事を追加"
           git push
-
